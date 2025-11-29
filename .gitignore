@@ -1,0 +1,65 @@
+# ----------------------------------------------------------------------
+# Compiled code, binaries, and temporary files
+# ----------------------------------------------------------------------
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*~
+*.swp
+*.bak
+*.orig
+.DS_Store
+
+# ----------------------------------------------------------------------
+# Operating System & IDE Specific Files
+# ----------------------------------------------------------------------
+# macOS/Linux
+.DS_Store
+.Trashes
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# Visual Studio Code (VS Code)
+.vscode/
+
+# JetBrains (IntelliJ, PyCharm, etc.)
+.idea/
+
+# Vim/Nano
+*.swp
+*~
+
+# ----------------------------------------------------------------------
+# Dependencies, Environments, and Build Artifacts
+# ----------------------------------------------------------------------
+# Virtual Environment
+# Use this line for Python projects
+venv/
+env/
+.venv/
+
+# Build artifacts (e.g., Python wheels, C/C++ builds)
+build/
+dist/
+target/
+.cache/
+
+# ----------------------------------------------------------------------
+# Logs, Data, and Credentials
+# ----------------------------------------------------------------------
+# Log files
+*.log
+
+# Credentials and secrets
+*.key
+*.pem
+*.env
+.env.local
+secret.yml
+credentials.json
+
+# Model weights and results
+*.csv
+*.pt
