@@ -5,10 +5,11 @@ from track.kalman_box_tracker import KalmanBoxTracker
 from track.utils import *
 
 # --- KHỞI TẠO DỮ LIỆU TEST ---
-DET_1 = np.array([[10, 10, 50, 50, 0.9], [60, 60, 100, 100, 0.8]])
-DET_2 = np.array([[12, 12, 52, 52, 0.95], [63, 63, 103, 103, 0.85]])
-DET_EMPTY = np.empty((0, 5))
-DET_NEW = np.array([[200, 200, 250, 250, 0.9]])
+# --- KHỞI TẠO DỮ LIỆU TEST ---
+DET_1 = np.array([[10, 10, 50, 50, 0.9, 0], [60, 60, 100, 100, 0.8, 0]])
+DET_2 = np.array([[12, 12, 52, 52, 0.95, 0], [63, 63, 103, 103, 0.85, 0]])
+DET_EMPTY = np.empty((0, 6))
+DET_NEW = np.array([[200, 200, 250, 250, 0.9, 0]])
 
 class TestSORTAlgorithm(unittest.TestCase):
 
@@ -61,9 +62,9 @@ class TestSORTAlgorithm(unittest.TestCase):
         # Frame 3: Update (Match)
         output_frame3 = tracker_system.update(DET_2)
         
-        # Check IDs (Should be 1 and 2 because SORT outputs id+1)
-        returned_ids = sorted(output_frame3[:, 4])
-        self.assertTrue(np.allclose(returned_ids, [1.0, 2.0]))
+        # Check IDs (Should be 0 and 1 because SORT outputs id from 0)
+        returned_ids = sorted([t.id for t in output_frame3])
+        self.assertTrue(np.allclose(returned_ids, [0.0, 1.0]))
 
     def test_04_track_disappearance_and_deletion(self):
         """Kiểm tra mất mát và xóa track (max_age)."""

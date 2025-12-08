@@ -3,20 +3,20 @@ import numpy as np
 from track.bytetrack import ByteTrack
 from track.kalman_box_tracker import KalmanBoxTracker
 
-# --- TEST DATA (5 columns: x1, y1, x2, y2, score) ---
-DET_1 = np.array([[10, 10, 50, 50, 0.9], [60, 60, 100, 100, 0.8]])
-DET_2 = np.array([[12, 12, 52, 52, 0.95], [63, 63, 103, 103, 0.85]])
+# --- TEST DATA (6 columns: x1, y1, x2, y2, score, class_id) ---
+DET_1 = np.array([[10, 10, 50, 50, 0.9, 0], [60, 60, 100, 100, 0.8, 0]])
+DET_2 = np.array([[12, 12, 52, 52, 0.95, 0], [63, 63, 103, 103, 0.85, 0]])
 
 # Low confidence detection that overlaps with Object 1
-DET_LOW_MATCH = np.array([[10, 10, 50, 50, 0.4]]) 
+DET_LOW_MATCH = np.array([[10, 10, 50, 50, 0.4, 0]]) 
 
 # Low confidence detection that is far away (Noise)
-DET_LOW_NOISE = np.array([[200, 200, 250, 250, 0.4]]) 
+DET_LOW_NOISE = np.array([[200, 200, 250, 250, 0.4, 0]]) 
 
 # High confidence detection in a new area
-DET_NEW = np.array([[200, 200, 250, 250, 0.9]])
+DET_NEW = np.array([[200, 200, 250, 250, 0.9, 0]])
 
-DET_EMPTY = np.empty((0, 5))
+DET_EMPTY = np.empty((0, 6))
 
 class TestByteTrackAlgorithm(unittest.TestCase):
 
@@ -30,7 +30,7 @@ class TestByteTrackAlgorithm(unittest.TestCase):
     def test_01_basic_high_conf_tracking(self):
         """Check standard tracking with high confidence detections."""
         # min_hits=1 to allow immediate output for testing
-        tracker_system = ByteTrack(min_hits=1, iou_threshold=0.3)
+        tracker_system = ByteTrack(min_hits=1, high_conf_iou_threshold=0.3)
         
         # Frame 1: Initialization
         tracks1 = tracker_system.update(DET_1)
@@ -41,8 +41,8 @@ class TestByteTrackAlgorithm(unittest.TestCase):
         self.assertEqual(len(tracks2), 2)
         
         # IDs should persist (e.g. 1 and 2)
-        ids1 = set(tracks1[:, 4])
-        ids2 = set(tracks2[:, 4])
+        ids1 = set([t.id for t in tracks1])
+        ids2 = set([t.id for t in tracks2])
         self.assertEqual(ids1, ids2)
 
     def test_02_low_conf_rescue(self):
@@ -61,8 +61,8 @@ class TestByteTrackAlgorithm(unittest.TestCase):
         
         # Should return the matched track
         self.assertEqual(len(tracks), 1)
-        # The ID should match one of the original IDs (1 or 2)
-        self.assertTrue(tracks[0, 4] in [1, 2])
+        # The ID should match one of the original IDs (0 or 1)
+        self.assertTrue(tracks[0].id in [0, 1])
 
     def test_03_low_conf_noise_filtration(self):
         """

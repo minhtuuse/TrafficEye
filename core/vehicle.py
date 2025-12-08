@@ -1,5 +1,6 @@
 from track.kalman_box_tracker import KalmanBoxTracker
 import time
+from utils.storage import MinioClient
 
 class Vehicle(KalmanBoxTracker):
     def __init__(self, bbox, class_id=None, **kwargs):
@@ -12,7 +13,7 @@ class Vehicle(KalmanBoxTracker):
         self.license_plate = None
         self.proof = [] # np.array (Crop images)
 
-    def mark_violation(self, violation_type, frame=None, padding=30):
+    def mark_violation(self, violation_type, frame=None, padding=30, frame_buffer=None, fps=30):
         if not self.has_violated:
             self.has_violated = True
             self.violation_type.append(violation_type)
@@ -24,3 +25,14 @@ class Vehicle(KalmanBoxTracker):
 
                 self.proof = frame[max(0, y1 - padding):min(h, y2 + padding),
                                    max(0, x1 - padding):min(w, x2 + padding)].copy()
+                
+                # Save proof and retraining data
+                MinioClient().save_proof(self.proof, self.id, violation_type)
+                MinioClient().save_retraining_data(frame, self.id, (x1, y1, x2, y2))
+                
+                # Save labeled proof
+                MinioClient().save_labeled_proof(frame, self.id, violation_type, (x1, y1, x2, y2))
+                
+                # Save video proof
+                if frame_buffer:
+                    MinioClient().save_video_proof(list(frame_buffer), self.id, violation_type, fps)

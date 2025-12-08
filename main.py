@@ -15,6 +15,7 @@ import numpy as np
 import supervision as sv
 import os
 import csv
+from collections import deque
 
 
 if __name__ == "__main__":
@@ -47,10 +48,7 @@ if __name__ == "__main__":
     FRAME_WIDTH, FRAME_HEIGHT, FPS, first_frame, ret = handle_video_capture(data_path)
     polygon_points = draw_polygon_zone(first_frame, window_name)
     polygon_points = np.array(polygon_points, dtype=int)
-    polygon_zone = sv.PolygonZone(polygon_points)
-    # line_points = draw_line_zone(first_frame, window_name)
-    # start, end = sv.Point(x=line_points[0][0], y = line_points[0][1]), sv.Point(x=line_points[1][0], y = line_points[1][1])
-    # line_zone = sv.LineZone(start=start, end=end)
+    polygon_zone = sv.PolygonZone(polygon_points) if len(polygon_points) >= 3 else None
 
     # supervision annotator for visualization
     box_annotator = sv.BoxAnnotator(thickness=2)
@@ -71,13 +69,17 @@ if __name__ == "__main__":
         conf_threshold=conf_threshold
     )
     csv_results = []
+    
+    # Frame buffer for video proof (store last 5 seconds)
+    buffer_maxlen = int(FPS * 3)
+    frame_buffer = deque(maxlen=buffer_maxlen)
 
     # Set up violation manager and violation types
     violations = [RedLightViolation(frame=first_frame, window_name=window_name)]
     violation_manager = ViolationManager(violations=violations)
 
     for i, result in enumerate(dets):
-        frame, det = preprocess_detection_result(result, None)
+        frame, det = preprocess_detection_result(result, polygon_zone)
 
         # Object tracking
         tracked_objs = tracker_instance.update(dets=det)
@@ -98,8 +100,11 @@ if __name__ == "__main__":
                 class_id=tracker_cls_ids
             )
         
+        # Update frame buffer
+        frame_buffer.append(frame.copy())
+
         # Update violation manager
-        violation_manager.update(vehicles=tracked_objs, sv_detections=sv_detections, frame=frame)
+        violation_manager.update(vehicles=tracked_objs, sv_detections=sv_detections, frame=frame, frame_buffer=frame_buffer, fps=FPS)
         
         draw_and_write_frame(tracked_objs, frame, sv_detections, box_annotator, label_annotator, video_writer)
 

@@ -32,8 +32,11 @@ def draw_polygon_zone(frame: np.ndarray, window_name: str = "Traffic Violation D
 
     print(f"\n--- [TUTORIAL] {zone_name} ---")
     print("1. Left mouse click to choose POLYGON points (RoI Region)")
-    print("2. Press 'n' to save the polygon (Needs ≥ 3 points)")
+    print("2. Press 's' to save the polygon (Needs ≥ 3 points)")
+    print("3. Press 'r' to revert back 1 point")
     print("3. Press 'ESC' to cancel")
+    print("Warning: At least 3 points are needed for a polygon. If you save with less than 3 points, it will return None.")
+
 
     while True:
         display_frame = frame.copy()
@@ -59,17 +62,24 @@ def draw_polygon_zone(frame: np.ndarray, window_name: str = "Traffic Violation D
             print(f"ESC pressed → {zone_name} cancelled")
             cv2.destroyWindow(window_name)
             return []
+        
+        if key == ord('r'):
+            if len(drawing_points) > 0:
+                removed_point = drawing_points.pop()
+                print(f"[{zone_name}] Removed last point: {removed_point}")
+            else:
+                print(f"[{zone_name}] No points to remove!")
 
-        if key == ord('n'):
+        if key == ord('s'):
             if len(drawing_points) < 3:
                 print(f"[{zone_name}] Requires at least 3 points for a polygon!")
-                continue
+                cv2.destroyWindow(window_name)
+                return drawing_points
             
             print(f"[{zone_name}] Polygon saved with {len(drawing_points)} points.")
             cv2.destroyWindow(window_name)
             return drawing_points
 
-# --- FUNCTION 2: DRAW LINE ZONE (Boundary Line) ---
 
 def draw_line_zone(frame: np.ndarray, window_name: str = "Traffic Violation Detection"):
     """
@@ -101,8 +111,10 @@ def draw_line_zone(frame: np.ndarray, window_name: str = "Traffic Violation Dete
 
     print(f"\n--- [TUTORIAL] {zone_name} ---")
     print("1. Left mouse click to choose 2 points for the LINE")
-    print("2. Press 'q' to save the line")
+    print("2. Press 's' to save the line")
+    print("3. Press 'r' to revert back 1 point")
     print("3. Press 'ESC' to cancel")
+    print("Warning: Only 2 points are allowed for a line. If you save with less than 2 points, it will return None.")
 
     while True:
         display_frame = frame.copy()
@@ -126,11 +138,19 @@ def draw_line_zone(frame: np.ndarray, window_name: str = "Traffic Violation Dete
             print(f"ESC pressed → {zone_name} cancelled")
             cv2.destroyWindow(window_name)
             return []
+        
+        if key == ord('r'):
+            if len(drawing_points) > 0:
+                removed_point = drawing_points.pop()
+                print(f"[{zone_name}] Removed last point: {removed_point}")
+            else:
+                print(f"[{zone_name}] No points to remove!")
 
-        if key == ord('q'):
+        if key == ord('s'):
             if len(drawing_points) != 2:
                 print(f"[{zone_name}] Requires exactly 2 points for a line!")
-                continue
+                cv2.destroyWindow(window_name)
+                return drawing_points
             
             print(f"[{zone_name}] Line saved.")
             cv2.destroyWindow(window_name)
@@ -148,14 +168,6 @@ def draw_and_write_frame(tracked_objs, frame, sv_detections, box_annotator, labe
         label_annotator (sv.LabelAnnotator)
         video_writer (cv2.VideoWriter)
     """
-    # violation_palette = sv.ColorPalette(colors=[sv.Color.GREEN, sv.Color.RED])
-    # class_ids = [1 if obj.has_violated else 0 for obj in tracked_objs]
-    # if len(tracked_objs) > 0:
-    #     class_ids = np.array([1 if obj.has_violated else 0 for obj in tracked_objs], dtype=int)
-    #     sv_detections.class_id = class_ids
-    # else:
-    #     sv_detections.class_id = np.array([], dtype=int)
-
     frame = box_annotator.annotate(
         scene=frame,
         detections=sv_detections
@@ -168,27 +180,7 @@ def draw_and_write_frame(tracked_objs, frame, sv_detections, box_annotator, labe
         labels=labels
     )
 
-    # line_zone_annotator.annotate(frame, line_counter=line_zone)
-
     if video_writer is not None:
         video_writer.write(frame)
 
     cv2.imshow(window_name, frame)
-
-    # if len(tracked_objs) > 0:
-    #     for tracker in tracked_objs:
-    #         x1, y1, x2, y2 = tracker.get_state()[0]
-    #         track_id = int(tracker.id)
-    #         is_violated = getattr(tracker, 'has_violated', False)
-    #         if is_violated:
-    #             color = (0, 0, 255) # Đỏ
-    #             label = f"ID: {track_id} [VIOLATION]"
-    #         else:
-    #             color = ((37 * track_id) % 255, (17 * track_id) % 255, (29 * track_id) % 255)
-    #             label = f"ID: {track_id}"
-    #         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-    #         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-    # if line_points is not None:
-    #     cv2.line(frame, line_points[0], line_points[1], color=(126, 0, 126), thickness=3)
-    # video_writer.write(frame)
-    # cv2.imshow("Tracking Results", frame)

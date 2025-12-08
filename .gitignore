@@ -5,6 +5,7 @@
 *.pyo
 *.pyd
 __pycache__/
+.pytest_cache/
 *~
 *.swp
 *.bak
@@ -54,6 +55,7 @@ target/
 data/
 output/
 runs/
+plan.txt
 
 # Credentials and secrets
 *.key
