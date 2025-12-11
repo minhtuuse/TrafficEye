@@ -4,8 +4,8 @@ from track.bytetrack import ByteTrack
 from detect.detect import inference_video
 from core.vehicle import Vehicle
 from utils.parse_args import parse_args_tracking
-from utils.drawing import draw_polygon_zone, draw_and_write_frame
-from utils.io import handle_result_filename, handle_video_capture, violation_save_worker
+from utils.drawing import draw_polygon_zone, render_frame
+from utils.io import handle_result_filename, violation_save_worker
 from detect.utils import preprocess_detection_result
 from core.violation import RedLightViolation
 from core.violation_manager import ViolationManager
@@ -18,9 +18,10 @@ import csv
 import threading
 import queue
 from collections import deque
+import line_profiler
 
-
-if __name__ == "__main__":
+@line_profiler.profile
+def main():
     args = parse_args_tracking()
 
     # Prepare output paths
@@ -33,9 +34,6 @@ if __name__ == "__main__":
 
     # Load config
     config = load_config()
-    
-    # Override config with CLI args if provided (optional, but good practice)
-    # For now, we prioritize CLI args for tracker selection, but use config for params
     
     if args.tracker == 'sort':
         cfg = config['tracking']['sort']
@@ -70,21 +68,12 @@ if __name__ == "__main__":
     worker_thread = threading.Thread(target=violation_save_worker,args=(violation_queue,), daemon=True)
     worker_thread.start()
     np.random.seed(42)
-
-    # Setup VideoWriter and display Window
     window_name = "Traffic Violation Detection"
-    FRAME_WIDTH, FRAME_HEIGHT, FPS, first_frame, ret = handle_video_capture(data_path)
-    polygon_points = draw_polygon_zone(first_frame, window_name)
-    polygon_points = np.array(polygon_points, dtype=int)
-    polygon_zone = sv.PolygonZone(polygon_points) if len(polygon_points) >= 3 else None
 
     # supervision annotator for visualization
     box_annotator = sv.BoxAnnotator(thickness=2)
     label_annotator = sv.LabelAnnotator(text_scale=0.5, text_padding=5)
-    line_zone_annotator = sv.LineZoneAnnotator()
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    video_writer = cv2.VideoWriter(video_result_path, fourcc, FPS, (FRAME_WIDTH, FRAME_HEIGHT))
     cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
 
     # Prepare detections
@@ -100,17 +89,30 @@ if __name__ == "__main__":
         iou_threshold=config['detections']['iou_threshold']
     )
     csv_results = []
-    
-    # Frame buffer for video proof
-    buffer_duration = config['violation']['video_proof_duration']
-    buffer_maxlen = int(FPS * buffer_duration)
-    frame_buffer = deque(maxlen=buffer_maxlen)
 
-    # Set up violation manager and violation types
-    violations = [RedLightViolation(frame=first_frame, window_name=window_name)]
-    violation_manager = ViolationManager(violations=violations)
+    # First run
+    first_run = True
 
     for i, result in enumerate(dets):
+        if first_run:
+            # Setup Window display
+            first_frame = result.orig_img
+            FRAME_WIDTH, FRAME_HEIGHT = first_frame.shape[1], first_frame.shape[0]
+            FPS = config['violation']['fps'] if config['violation']['fps'] is not None else 30
+            polygon_points = draw_polygon_zone(first_frame, window_name)
+            polygon_points = np.array(polygon_points, dtype=int)
+            polygon_zone = sv.PolygonZone(polygon_points) if len(polygon_points) >= 3 else None
+
+            # Frame buffer for video proof
+            buffer_duration = config['violation']['video_proof_duration']
+            buffer_maxlen = int(FPS * buffer_duration)
+            frame_buffer = deque(maxlen=buffer_maxlen)
+
+            # Set up violation manager and violation types
+            violations = [RedLightViolation(frame=first_frame, window_name=window_name)]
+            violation_manager = ViolationManager(violations=violations)
+            first_run = False
+
         frame, det = preprocess_detection_result(result, polygon_zone)
 
         # Object tracking
@@ -138,7 +140,7 @@ if __name__ == "__main__":
         # Update violation manager
         violation_manager.update(vehicles=tracked_objs, sv_detections=sv_detections, frame=frame, frame_buffer=frame_buffer, fps=FPS, save_queue=violation_queue)
         
-        draw_and_write_frame(tracked_objs, frame, sv_detections, box_annotator, label_annotator, video_writer)
+        render_frame(tracked_objs, frame, sv_detections, box_annotator, label_annotator)
 
         if args.save == "True":
             frame_num = i + 1
@@ -152,7 +154,6 @@ if __name__ == "__main__":
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     
-    video_writer.release()
     cv2.destroyAllWindows()
 
     # Save results to CSV
@@ -163,3 +164,6 @@ if __name__ == "__main__":
     print(f"Tracking results succesfully saved to {video_result_path} and {csv_result_path}")
     print(FRAME_WIDTH, FRAME_HEIGHT, FPS)
     print(len(csv_results))
+
+if __name__ == "__main__":
+    main()

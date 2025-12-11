@@ -45,5 +45,5 @@ class Vehicle(KalmanBoxTracker):
                     'fps': fps,
                     'proof_crop': self.proof
                 }
-
-                save_queue.put(violation_data)
+                if save_queue is not None:
+                    save_queue.put(violation_data)
