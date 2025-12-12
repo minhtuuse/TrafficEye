@@ -1,7 +1,5 @@
 import os
-import cv2
 import re
-import glob
 from utils.storage import MinioClient
 
 def handle_result_filename(data_path, tracker_name):
@@ -34,34 +32,6 @@ def handle_result_filename(data_path, tracker_name):
         result_filename = f"{base_name}_{tracker_name}"
         return result_filename, ext
 
-def handle_video_capture(data_path):
-    """Handle cv2 video capture for data_path as folder and video
-
-    Args:
-        data_path (str): path to video file or folder containing images
-    """
-    if os.path.isdir(data_path):
-        img_files = sorted(
-            glob.glob(os.path.join(data_path, "*.jpg")) +
-            glob.glob(os.path.join(data_path, "*.png")) + 
-            glob.glob(os.path.join(data_path, "*.jpeg"))
-        )
-
-        if len(img_files) == 0:
-            raise ValueError(f"No images found in directory: {data_path}")
-        file_path = img_files[0]
-
-    else:
-        file_path = data_path
-
-    cap = cv2.VideoCapture(file_path)
-    ret, frame = cap.read()
-    FRAME_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    FRAME_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    FPS = cap.get(cv2.CAP_PROP_FPS)
-    cap.release()
-
-    return FRAME_WIDTH, FRAME_HEIGHT, FPS, frame, ret
 
 
 def violation_save_worker(save_queue):

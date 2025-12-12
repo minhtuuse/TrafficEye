@@ -27,7 +27,7 @@ def draw_polygon_zone(frame: np.ndarray, window_name: str = "Traffic Violation D
             drawing_points.append((x, y))
             print(f"[{zone_name}] Point selected: ({x}, {y})")
 
-    cv2.namedWindow(window_name)
+    cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
     cv2.setMouseCallback(window_name, mouse_callback)
 
     print(f"\n--- [TUTORIAL] {zone_name} ---")
@@ -132,7 +132,7 @@ def draw_line_zone(frame: np.ndarray, window_name: str = "Traffic Violation Dete
             other_exception_lines_drawing_points.append((x, y))
             print(f"[{zone_name}] Point selected: ({x}, {y})")
 
-    cv2.namedWindow(window_name)
+    cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
 
     print(f"\n--- [TUTORIAL] {zone_name} ---")
     print("1. Left mouse click to choose 2 points for each LINE")
@@ -204,7 +204,7 @@ def draw_line_zone(frame: np.ndarray, window_name: str = "Traffic Violation Dete
     return violation_lines_drawing_points, special_violation_lines_drawing_points, left_exception_lines_drawing_points, right_exception_lines_drawing_points, other_exception_lines_drawing_points
 
 
-def draw_and_write_frame(tracked_objs, frame, sv_detections, box_annotator, label_annotator, video_writer, window_name="Traffic Violation Detection"):
+def render_frame(tracked_objs, frame, sv_detections, box_annotator, label_annotator, window_name="Traffic Violation Detection"):
     """Process a single detection result, draws bbox, writes the frame
 
     Args:
@@ -213,7 +213,6 @@ def draw_and_write_frame(tracked_objs, frame, sv_detections, box_annotator, labe
         sv_detections (sv.Detections): Detections result in the supervision format
         box_annotator (sv.BoxAnnotator)
         label_annotator (sv.LabelAnnotator)
-        video_writer (cv2.VideoWriter)
     """
     frame = box_annotator.annotate(
         scene=frame,
@@ -226,8 +225,5 @@ def draw_and_write_frame(tracked_objs, frame, sv_detections, box_annotator, labe
         detections=sv_detections,
         labels=labels
     )
-
-    if video_writer is not None:
-        video_writer.write(frame)
 
     cv2.imshow(window_name, frame)

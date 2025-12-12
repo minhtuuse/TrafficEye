@@ -11,7 +11,7 @@ class Violation:
         self.name = name
         self.polygon_zone = sv.PolygonZone(polygon=polygon_points, triggering_anchors=[sv.Position.CENTER])
 
-    def check_violation(self, vehicles: List[Vehicle]):
+    def check_violation(self, recognizer, vehicles: List[Vehicle]):
         """Check violation of vehicles
 
         Args:
@@ -38,7 +38,7 @@ class RedLightViolation(Violation):
         self.other_exception_lines = [] # for checking other exceptions (e.g., U-turn)
         self.draw_line(kwargs.get('frame', None), kwargs.get('window_name', "Traffic Violation Detection"))
 
-    def check_violation(self, vehicles: List[Vehicle], sv_detections: sv.Detections, frame, traffic_light_state: list=[None, 'RED', 'GREEN'], **kwargs):
+    def check_violation(self, recognizer, vehicles: List[Vehicle], sv_detections: sv.Detections, frame, traffic_light_state: list=[None, 'RED', 'GREEN'], **kwargs):
         """Check the violation state of vehicles tracked
 
         Args:
@@ -138,11 +138,11 @@ class RedLightViolation(Violation):
             if outside_polygon_mask[i] and vehicle.has_violated:
                 # straight going vehicle running red light
                 if vehicle.going_straight and vehicle.straight_light_signal_when_crossing == 'RED':
-                    vehicle.mark_violation("Red Light", frame=vehicle.frame_of_violation, frame_buffer=frame_buffer, fps=fps, save_queue=save_queue)
+                    vehicle.mark_violation("Red Light", recognizer, frame=vehicle.frame_of_violation, frame_buffer=frame_buffer, fps=fps, save_queue=save_queue)
                     violated_vehicles.append(vehicle)
                 # turning vehicle running red light
                 elif not vehicle.going_straight:
-                    vehicle.mark_violation("Red Light - Turning", frame=vehicle.frame_of_violation, frame_buffer=frame_buffer, fps=fps, save_queue=save_queue)
+                    vehicle.mark_violation("Red Light - Turning", recognizer, frame=vehicle.frame_of_violation, frame_buffer=frame_buffer, fps=fps, save_queue=save_queue)
                     violated_vehicles.append(vehicle)
 
         return violated_vehicles
