@@ -29,3 +29,4 @@ def test_default_config_exists():
     assert 'detections' in config
     assert 'tracking' in config
     assert 'violation' in config
+    assert 'system' in config

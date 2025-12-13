@@ -36,7 +36,17 @@ class RedLightViolation(Violation):
         self.left_exception_lines = [] # for checking left turn exception
         self.right_exception_lines = [] # for checking right turn exception
         self.other_exception_lines = [] # for checking other exceptions (e.g., U-turn)
-        self.draw_line(kwargs.get('frame', None), kwargs.get('window_name', "Traffic Violation Detection"))
+        
+        if kwargs.get('lines', None):
+            self.load_lines_from_config(kwargs.get('lines', None))
+        else:
+            # If no lines provided, we typically would ask user to draw. 
+            # But in headless/GUI mode we might want to skip or rely on external drawing.
+            # If kwargs has 'interactive' we could default to True?
+            # For now, let's check if we are in a mode that allows this.
+            # Ideally, we just don't call it if we want to stop the popup, 
+            # assuming the system will be configured via UI.
+            self.draw_line(kwargs.get('frame', None), kwargs.get('window_name', "Traffic Violation Detection"))
 
     def check_violation(self, recognizer, vehicles: List[Vehicle], sv_detections: sv.Detections, frame, traffic_light_state: list=[None, 'RED', 'GREEN'], **kwargs):
         """Check the violation state of vehicles tracked
@@ -152,6 +162,31 @@ class RedLightViolation(Violation):
                     violated_vehicles.append(vehicle)
 
         return violated_vehicles
+
+    def load_lines_from_config(self, lines_config):
+        """Load lines from configuration dictionary"""
+        categories = [
+            ("violation_lines", "violation_lines"),
+            ("special_violation_lines", "special_violation_lines"),
+            ("left_exception_lines", "left_exception_lines"),
+            ("right_exception_lines", "right_exception_lines"),
+            ("other_exception_lines", "other_exception_lines")
+        ]
+        
+        for attr_name, key in categories:
+            target_list = getattr(self, attr_name)
+            points_list = lines_config.get(key, [])
+            
+            # Expecting points_list to be list of point pairs or list of points that form lines?
+            # utils/zones.py saves "lines" as a simple list of points [p1, p2, p3, p4...] where (p1,p2) is a line.
+            # If the config distinguishes keys, good. If it's just "lines", we might need to map it.
+            # Let's assume lines_config has these specific keys.
+            
+            for i in range(0, len(points_list), 2):
+                if i + 1 < len(points_list):
+                    start = sv.Point(x=points_list[i][0], y=points_list[i][1])
+                    end = sv.Point(x=points_list[i+1][0], y=points_list[i+1][1])
+                    target_list.append(sv.LineZone(start=start, end=end, triggering_anchors=[sv.Position.CENTER]))
 
     def draw_line(self, frame: np.ndarray, window_name="Traffic Violation Detection"):
         """Draw the violation line on the frame

@@ -1,0 +1,242 @@
+import torch
+import numpy as np
+import supervision as sv
+from collections import deque
+import queue
+import threading
+from ultralytics import YOLO
+from paddleocr import PaddleOCR
+
+from track.sort import SORT
+from track.bytetrack import ByteTrack
+from detect.detect import inference_video
+from core.vehicle import Vehicle
+from core.violation import RedLightViolation
+from core.violation_manager import ViolationManager
+from core.license_plate_recognizer import LicensePlateRecognizer
+from utils.config import load_config
+from utils.io import violation_save_worker
+from detect.utils import preprocess_detection_result
+from utils.zones import load_zones
+from utils.drawing import render_frame
+
+class TrafficSystem:
+    def __init__(self, config_path="config.yaml"):
+        self.config_path = config_path
+        self.config = load_config(config_path)
+        
+        # Load models
+        print("Loading models...")
+        self.device = self.config.get('system', {}).get('device', 'cuda') if torch.cuda.is_available() else 'cpu'
+        
+        self.vehicle_model_path = self.config.get('system', {}).get('vehicle_model', "detect_gtvn.pt")
+        self.license_model_path = self.config.get('system', {}).get('license_model', "lp_yolo11s.pt")
+        # self.character_model_path = self.config.get('system', {}).get('character_model', "yolo11s.pt") # Unused?
+        
+        self.vehicle_model = YOLO(self.vehicle_model_path, task='detect')
+        self.license_model = YOLO(self.license_model_path, task='detect')
+        self.character_model = PaddleOCR(use_angle_cls=True, lang='en')
+        
+        self.tracker_instance = None
+        self.violation_manager = None
+        self.polygon_zone = None
+        self.violation_queue = queue.Queue()
+        self.worker_thread = None
+        
+        self.running = False
+        self.generator = None
+        
+        # Annotators
+        self.box_annotator = sv.BoxAnnotator(thickness=2)
+        self.label_annotator = sv.LabelAnnotator(text_scale=0.5, text_padding=5)
+        
+        # State
+        self.data_path = self.config.get('system', {}).get('data_path', "data/traffic_video.avi") 
+        self.tracker_name = self.config.get('system', {}).get('tracker', "bytetrack")
+        
+        # Initialize worker
+        self.start_worker()
+
+        # First frame for drawing zones
+        self.first_frame = None
+
+    def start_worker(self):
+        if self.worker_thread is None or not self.worker_thread.is_alive():
+            self.worker_thread = threading.Thread(target=violation_save_worker, args=(self.violation_queue,), daemon=True)
+            self.worker_thread.start()
+
+    def update_config(self, new_config):
+        # Update internal config dict
+        self.config = new_config
+        
+    def set_source(self, data_path, tracker_name):
+        self.data_path = data_path
+        self.tracker_name = tracker_name
+        
+    def init_tracker(self):
+        conf_threshold = 0.25
+        if self.tracker_name == 'sort':
+            cfg = self.config['tracking']['sort']
+            self.tracker_instance = SORT(
+                cost_function=cfg['cost_function'], 
+                max_age=cfg['max_age'], 
+                min_hits=cfg['min_hits'], 
+                iou_threshold=cfg['iou_threshold'], 
+                tracker_class=Vehicle
+            )
+            conf_threshold = cfg['conf_threshold']
+        elif self.tracker_name == 'bytetrack':
+            cfg = self.config['tracking']['bytetrack']
+            self.tracker_instance = ByteTrack(
+                cost_function=cfg['cost_function'], 
+                max_age=cfg['max_age'], 
+                min_hits=cfg['min_hits'], 
+                high_conf_threshold=cfg['high_conf_threshold'], 
+                low_conf_threshold=cfg['low_conf_threshold'],
+                high_conf_iou_threshold=cfg['high_conf_iou_threshold'],
+                low_conf_iou_threshold=cfg['low_conf_iou_threshold'],
+                tracker_class=Vehicle
+            )
+            conf_threshold = cfg['conf_threshold']
+        
+        return conf_threshold
+
+    def capture_first_frame(self):
+        """Capture a single frame from the source for setting up zones."""
+        if self.first_frame is None:
+            return None
+        return self.first_frame
+
+    def start(self):
+        self.running = True
+        # self.generator = self._process_flow() # Removed to avoid double stream initialization
+
+    def stop(self):
+        self.running = False
+        self.generator = None
+
+    def _process_flow(self):
+        # Setup source
+        source_path = self.data_path
+        if source_path == "cam_ai":
+            source_path = "rtsp://localhost:8554/cam_ai"
+        
+        conf_threshold = self.init_tracker()
+        
+        # Inference generator
+        dets = inference_video(
+            model=self.vehicle_model,
+            data_path=source_path,
+            output_path=None,
+            device=self.device,
+            stream=True,
+            conf_threshold=conf_threshold,
+            classes=self.config['detections']['classes'],
+            imgsz=self.config['detections']['imgsz'],
+            iou_threshold=self.config['detections']['iou_threshold'],
+            stream_buffer=False
+        )
+
+        first_run = True
+        FPS = 30
+        frame_buffer = None
+        
+        for result in dets:
+            if not self.running:
+                break
+                
+            if first_run:
+                self.first_frame = result.orig_img
+                FPS = self.config['violation']['fps'] if self.config['violation']['fps'] is not None else 30
+                
+                # Load zones 
+                zones = load_zones()
+                polygon_points = zones.get("polygon", [])
+                lines_config = zones.get("lines_config", {}) # Expecting a dict of categories now
+                # Backward compatibility or fallback if 'lines' exists as a flat list
+                if "lines" in zones and not lines_config:
+                     # Default to violation_lines
+                     lines_config["violation_lines"] = zones["lines"]
+                
+                # Default polygon if none
+                if len(polygon_points) < 3:
+                     # Fallback to full frame or center?
+                     # Let's just default to a small box if missing
+                     h, w = self.first_frame.shape[:2]
+                     polygon_points = [[w//4, h//4], [w*3//4, h//4], [w*3//4, h*3//4], [w//4, h*3//4]]
+
+                polygon_points = np.array(polygon_points, dtype=int)
+                self.polygon_zone = sv.PolygonZone(polygon_points, triggering_anchors=[sv.Position.CENTER])
+                
+                # Frame buffer
+                buffer_duration = self.config['violation']['video_proof_duration']
+                buffer_maxlen = int(FPS * buffer_duration)
+                frame_buffer = deque(maxlen=buffer_maxlen)
+                
+                # Initialize Violation Manager
+                violations = [RedLightViolation(polygon_points=polygon_points, lines=lines_config, frame=self.first_frame, window_name="Traffic Violation")]
+                licensePlate_recognizer = LicensePlateRecognizer(license_model=self.license_model, character_model=self.character_model)
+                self.violation_manager = ViolationManager(violations=violations, recognizer=licensePlate_recognizer)
+                
+                first_run = False
+            
+            # Preprocess
+            frame, det = preprocess_detection_result(result)
+            
+            # Tracking
+            tracked_objs = self.tracker_instance.update(dets=det)
+            
+            states = [obj.get_state()[0] for obj in tracked_objs]
+            ids = [obj.id for obj in tracked_objs] 
+            cls_ids = [obj.class_id for obj in tracked_objs]
+            
+            if len(states) == 0:
+                sv_detections = sv.Detections.empty()
+            else:
+                xyxy = np.array(states)
+                tracker_ids = np.array(ids)
+                tracker_cls_ids = np.array(cls_ids)
+                sv_detections = sv.Detections(
+                    xyxy=xyxy,
+                    tracker_id=tracker_ids,
+                    class_id=tracker_cls_ids
+                )
+            
+            # Trigger zones
+            in_zone_mask = self.polygon_zone.trigger(detections=sv_detections)
+            for obj in tracked_objs:
+                if obj.is_being_tracked == False and obj.id in sv_detections.tracker_id[in_zone_mask]:
+                    obj.is_being_tracked = True
+            
+            visualized_tracked_objs = [obj for obj in tracked_objs if obj.is_being_tracked]
+            visualize_mask = np.isin(sv_detections.tracker_id, [obj.id for obj in visualized_tracked_objs])
+            visualized_sv_detections = sv_detections[visualize_mask]
+            
+            # Update frame buffer
+            frame_buffer.append(frame.copy())
+            
+            # Violation Update
+            # Using mock traffic light for now, or we can add logic to detect it
+            stats = self.violation_manager.update(
+                vehicles=visualized_tracked_objs, 
+                sv_detections=visualized_sv_detections, 
+                frame=frame, 
+                traffic_light_state=[None, 'RED', 'RED'], 
+                frame_buffer=frame_buffer, 
+                fps=FPS, 
+                save_queue=self.violation_queue
+            )
+            
+            # Draw
+            annotated_frame = render_frame(visualized_tracked_objs, frame, visualized_sv_detections, self.box_annotator, self.label_annotator)
+            
+            yield annotated_frame, stats
+
+    def get_latest_frame(self):
+        if self.generator:
+            try:
+                return next(self.generator)
+            except StopIteration:
+                self.running = False
+                return None, None
+        return None, None

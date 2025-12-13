@@ -54,7 +54,7 @@ services:
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
-# networks:
-#   default:
-#     name: traffic-monitor
-#     driver: bridge
+networks:
+  default:
+    name: traffic-monitor
+    driver: bridge

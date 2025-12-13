@@ -175,4 +175,4 @@ def render_frame(tracked_objs, frame, sv_detections, box_annotator, label_annota
         labels=labels
     )
 
-    cv2.imshow(window_name, frame)
+    return frame

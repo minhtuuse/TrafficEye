@@ -5,7 +5,7 @@ def parse_args_tracking():
     parser.add_argument(
         '--data_path', 
         type=str, 
-        default="data/traffic_video.mp4",
+        default="data/traffic_video.avi",
         help='Path to the input video file (e.g., data/video.mp4).'
     )
     parser.add_argument(
