@@ -1,5 +1,8 @@
 import cv2
 import numpy as np
+import warnings
+
+warnings.filterwarnings("ignore")
 
 class LicensePlateRecognizer:
     """
@@ -45,25 +48,41 @@ class LicensePlateRecognizer:
 
         if plate_text is None or len(plate_text) <= 3:
             return None
+        print(plate_text)
+        return plate_text
 
-        return plate_text.strip()
 
+    def _ocr(self, lp_img, min_score=0.5):
+        lp_rgb = cv2.cvtColor(lp_img, cv2.COLOR_BGR2RGB)
 
-    def _ocr(self, lp_img):
-        """
-        OCR using your character model.
-        Modify this based on the OCR you're using.
-        """
-        try:
-            result = self.character_model.ocr(lp_img)
-            if isinstance(result, str):
-                return result
+        results = self.character_model.predict(lp_rgb)
+        if not results:
+            return ""
 
-            if isinstance(result, list) and len(result) > 0:
-                return result[0][1][0]  # text
+        res = results[0]
 
-        except Exception as e:
-            print("[OCR Error]", e)
-            return None
+        texts  = res["rec_texts"]
+        scores = res["rec_scores"]
+        boxes  = res["rec_boxes"]
 
-        return None
+        if not texts:
+            return ""
+
+        merged = []
+        for text, score, box in zip(texts, scores, boxes):
+            if score < min_score:
+                continue
+
+            x1, y1, x2, y2 = box
+            merged.append((text, score, y1, x1))
+
+        if not merged:
+            return ""
+
+        merged_sorted = sorted(merged, key=lambda x: (x[2], x[3]))
+
+        sorted_texts = [m[0] for m in merged_sorted]
+
+        final_text = "".join(sorted_texts)
+
+        return final_text
