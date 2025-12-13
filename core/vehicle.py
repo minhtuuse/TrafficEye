@@ -17,6 +17,8 @@ class Vehicle(KalmanBoxTracker):
         self.straight_light_signal_when_crossing = None
         self.going_straight = True
         self.frame_of_violation = None
+        self.state_when_violation = None
+        self.bboxes_buffer = []
         self.violation_type = []
         self.violation_time = []
 
@@ -42,7 +44,7 @@ class Vehicle(KalmanBoxTracker):
     
 
     def mark_violation(self, violation_type, recognizer, frame=None, padding=None,
-                       frame_buffer=None, fps=30, save_queue=None):
+                       frame_buffer=None, bboxes_buffer=None, fps=30, state=None, save_queue=None):
 
         if padding is None:
             padding = config['violation']['padding']
@@ -61,7 +63,7 @@ class Vehicle(KalmanBoxTracker):
             self.violation_time.append(time.time())
 
             if frame is not None:
-                x1, y1, x2, y2 = map(int, self.get_state()[0])
+                x1, y1, x2, y2 = map(int, state)
                 h, w, _ = frame.shape
 
                 self.proof = frame[max(0, y1 - padding):min(h, y2 + padding),
@@ -73,6 +75,7 @@ class Vehicle(KalmanBoxTracker):
                     'violation_type': violation_type,
                     'frame': frame.copy(),
                     'bbox': (x1, y1, x2, y2),
+                    'bboxes': bboxes_buffer,
                     'frame_buffer': list(frame_buffer) if frame_buffer else [],
                     'fps': fps,
                     'proof_crop': self.proof

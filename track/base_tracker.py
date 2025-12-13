@@ -74,3 +74,11 @@ class BaseTracker:
                 self.trackers.pop(i)
 
         return ret
+    
+    def get_tracked_objects(self):
+        """Get currently tracked objects
+
+        Returns:
+            list: list of tracked objects
+        """
+        return self.trackers

@@ -45,13 +45,13 @@ class MinioClient:
             object_name = os.path.basename(file_path)
         try:
             self.s3.upload_file(file_path, bucket_name, object_name)
-            print(f"File {file_path} uploaded to {bucket_name}/{object_name}")
+            print(f"\nFile {file_path} uploaded to {bucket_name}/{object_name}")
             return True
         except FileNotFoundError:
-            print("The file was not found")
+            print("\nThe file was not found")
             return False
         except NoCredentialsError:
-            print("Credentials not available")
+            print("\nCredentials not available")
             return False
 
     def upload_image_from_memory(self, image_np, bucket_name, object_name):
@@ -62,15 +62,15 @@ class MinioClient:
             # Encode image to jpg
             is_success, buffer = cv2.imencode(".jpg", image_np)
             if not is_success:
-                print("Failed to encode image")
+                print("\nFailed to encode image")
                 return False
             
             io_buf = BytesIO(buffer)
             self.s3.upload_fileobj(io_buf, bucket_name, object_name, ExtraArgs={'ContentType': 'image/jpeg'})
-            print(f"Image uploaded to {bucket_name}/{object_name}")
+            print(f"\nImage uploaded to {bucket_name}/{object_name}")
             return True
         except Exception as e:
-            print(f"Error uploading image: {e}")
+            print(f"\nError uploading image: {e}")
             return False
 
     def save_proof(self, frame, vehicle_id, violation_type):
@@ -113,10 +113,10 @@ class MinioClient:
                     Key=label_filename,
                     Body=label_content
                 )
-                print(f"Label uploaded to {self.buckets['retraining']}/{label_filename}")
+                print(f"\nLabel uploaded to {self.buckets['retraining']}/{label_filename}")
                 return True
             except Exception as e:
-                print(f"Error uploading label: {e}")
+                print(f"\nError uploading label: {e}")
                 return False
         return False
 
@@ -138,12 +138,15 @@ class MinioClient:
         
         return self.upload_image_from_memory(labeled_frame, self.buckets['proofs'], filename)
 
-    def save_video_proof(self, frames, vehicle_id, violation_type, fps=30):
+    def save_video_proof(self, frames, vehicle_id, violation_type, bboxes, fps=30):
         """
         Save a video clip as proof.
         """
         if not frames:
             return False
+        
+        if bboxes:
+            bbox_map = {i: bbox for i, bbox in bboxes}
         
         time_now = datetime.now()
         date_folder = time_now.strftime("%Y_%m")
@@ -156,19 +159,35 @@ class MinioClient:
             temp_path = tmp_file.name
             
         try:
-            h, w, _ = frames[0].shape
+            h, w, _ = frames[0][1].shape
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             out = cv2.VideoWriter(temp_path, fourcc, fps, (w, h))
             
-            for frame in frames:
-                out.write(frame)
+            for frame_counter, frame in frames:
+                draw_frame = frame.copy()
+                if bboxes:
+                    if frame_counter in bbox_map:
+                        bbox = bbox_map[frame_counter]
+                        x1, y1, x2, y2 = map(int, bbox)
+                        cv2.rectangle(draw_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                        cv2.putText(draw_frame, f"ID: {vehicle_id} {violation_type}", (x1, y1 - 10), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                    else:
+                        # No bbox for this frame, draw using last known bbox
+                        bbox = bbox_map.get(max([k for k in bbox_map.keys() if k <= frame_counter]), None)
+                        if bbox:
+                            x1, y1, x2, y2 = map(int, bbox)
+                            cv2.rectangle(draw_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                            cv2.putText(draw_frame, f"ID: {vehicle_id} {violation_type}", (x1, y1 - 10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                out.write(draw_frame)
             out.release()
             
             # Upload
             success = self.upload_file(temp_path, self.buckets['proofs'], filename)
             return success
         except Exception as e:
-            print(f"Error creating/uploading video proof: {e}")
+            print(f"\nError creating/uploading video proof: {e}")
             return False
         finally:
             if os.path.exists(temp_path):

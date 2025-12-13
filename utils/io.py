@@ -48,6 +48,7 @@ def violation_save_worker(save_queue):
             violation_type = data['violation_type']
             frame = data['frame']
             bbox = data['bbox']
+            bboxes = data['bboxes']
             frame_buffer = data['frame_buffer']
             fps = data['fps']
             proof_crop = data['proof_crop']
@@ -57,10 +58,10 @@ def violation_save_worker(save_queue):
             client.save_labeled_proof(frame, identifier, violation_type, bbox)
             
             if frame_buffer:
-                client.save_video_proof(frame_buffer, identifier, violation_type, fps)
+                client.save_video_proof(frame_buffer, identifier, violation_type, bboxes, fps)
             
-            print(f"[Worker] Saved violation for ID: {identifier}")
+            print(f"\n[Worker] Saved violation for ID: {identifier}")
         except Exception as e:
-            print(f"[Worker] Error saving violation: {e}")
+            print(f"\n[Worker] Error saving violation: {e}")
         finally:
             save_queue.task_done()

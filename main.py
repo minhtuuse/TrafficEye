@@ -19,6 +19,7 @@ import os
 import csv
 import threading
 import queue
+import time
 from collections import deque
 import line_profiler
 
@@ -121,6 +122,7 @@ def main():
             buffer_duration = config['violation']['video_proof_duration']
             buffer_maxlen = int(FPS * buffer_duration)
             frame_buffer = deque(maxlen=buffer_maxlen)
+            frame_counter = 0
 
             # Set up violation manager and violation types
             violations = [RedLightViolation(polygon_points=polygon_points, frame=first_frame, window_name=window_name)]
@@ -129,9 +131,11 @@ def main():
             first_run = False
 
         frame, det = preprocess_detection_result(result)
+        frame_counter += 1
 
         # Object tracking
         tracked_objs = tracker_instance.update(dets=det)
+        all_tracked_objs = tracker_instance.get_tracked_objects()
 
         # Can optimize for better performance, now using 2 for loops for simplicity
         states = [obj.get_state()[0] for obj in tracked_objs]
@@ -150,16 +154,22 @@ def main():
             )
 
         in_zone_mask = polygon_zone.trigger(detections=sv_detections)
-        for obj in tracked_objs:
+
+        for obj in all_tracked_objs:
             if obj.is_being_tracked == False and obj.id in sv_detections.tracker_id[in_zone_mask]:
                 obj.is_being_tracked = True
+            if obj.bboxes_buffer is not None:
+                obj.bboxes_buffer.append((frame_counter, obj.get_state()[0]))
+            else:
+                obj.bboxes_buffer = deque(maxlen=buffer_maxlen)
+                obj.bboxes_buffer.append((frame_counter, obj.get_state()[0]))
 
         visualized_tracked_objs = [obj for obj in tracked_objs if obj.is_being_tracked]
         visualize_mask = np.isin(sv_detections.tracker_id, [obj.id for obj in visualized_tracked_objs])
         visualized_sv_detections = sv_detections[visualize_mask]
 
         # Update frame buffer
-        frame_buffer.append(frame.copy())
+        frame_buffer.append((frame_counter, frame.copy()))
 
         # Update violation manager
         violation_manager.update(vehicles=visualized_tracked_objs, sv_detections=visualized_sv_detections, frame=frame, traffic_light_state=[None, 'RED', 'RED'], frame_buffer=frame_buffer, fps=FPS, save_queue=violation_queue)
@@ -179,6 +189,19 @@ def main():
             break
     
     cv2.destroyAllWindows()
+
+    # wait for violation saving queue to be empty
+    while violation_queue.qsize() > 0:
+        print(
+        f"\r[Main] Waiting for violation queue to be empty. Remaining items: {violation_queue.qsize():3d}",
+        end="",
+        flush=True,
+    )
+        time.sleep(0.1)
+
+    time.sleep(1)  # Ensure all items are processed
+    violation_queue.put(None)  # Stop the worker thread
+    worker_thread.join()
 
     # Save results to CSV
     if args.save == "True":

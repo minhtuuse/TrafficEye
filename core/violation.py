@@ -117,32 +117,38 @@ class RedLightViolation(Violation):
                 vehicle.has_violated = True
                 vehicle.straight_light_signal_when_crossing = straight_Light
                 vehicle.frame_of_violation = frame.copy()
+                vehicle.state_when_violation = vehicle.get_state()[0]
 
             if special_violated_mask[i]:
                 vehicle.has_violated = True
                 vehicle.going_straight = False
                 vehicle.frame_of_violation = frame.copy()
+                vehicle.state_when_violation = vehicle.get_state()[0]
 
             # allow exceptions
             if exception_mask[i] and vehicle.has_violated:
                 vehicle.has_violated = False
                 vehicle.going_straight = False
                 vehicle.frame_of_violation = None
+                vehicle.state_when_violation = None
             
             # turning when blocked
             if turning_blocked_mask[i] and vehicle.has_violated:
                 vehicle.going_straight = False
                 vehicle.frame_of_violation = frame.copy()
+                vehicle.state_when_violation = vehicle.get_state()[0]
 
             # decide violation when leaving the polygon zone
             if outside_polygon_mask[i] and vehicle.has_violated:
                 # straight going vehicle running red light
                 if vehicle.going_straight and vehicle.straight_light_signal_when_crossing == 'RED':
-                    vehicle.mark_violation("Red Light", recognizer, frame=vehicle.frame_of_violation, frame_buffer=frame_buffer, fps=fps, save_queue=save_queue)
+                    vehicle.mark_violation("Red Light", recognizer, frame=vehicle.frame_of_violation, frame_buffer=frame_buffer, 
+                                           bboxes_buffer=vehicle.bboxes_buffer, fps=fps, state=vehicle.state_when_violation, save_queue=save_queue)
                     violated_vehicles.append(vehicle)
                 # turning vehicle running red light
                 elif not vehicle.going_straight:
-                    vehicle.mark_violation("Red Light - Turning", recognizer, frame=vehicle.frame_of_violation, frame_buffer=frame_buffer, fps=fps, save_queue=save_queue)
+                    vehicle.mark_violation("Red Light - Turning", recognizer, frame=vehicle.frame_of_violation,
+                                           frame_buffer=frame_buffer, bboxes_buffer=vehicle.bboxes_buffer, fps=fps, state=vehicle.state_when_violation, save_queue=save_queue)
                     violated_vehicles.append(vehicle)
 
         return violated_vehicles
