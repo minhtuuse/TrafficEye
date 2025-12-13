@@ -62,11 +62,11 @@ class RedLightViolation(Violation):
         # If a vehicle can only turn right when the straight light is green because there is no right turn light, set right_Light = straight_Light.
         # If no light state for turning left is provided, left_Light will be set to the state of straight_Light.
         # This code now does not handle different vehicle types. So roads that allow some vehicle types to turn when the light is red are not supported.
-        left_Light, straight_Light, right_Light = traffic_light_state
-        if left_Light is None:
-            left_Light = straight_Light
-        if right_Light is None:
-            right_Light = 'GREEN'
+        left_light, straight_light, right_light = traffic_light_state
+        if left_light is None:
+            left_light = straight_light
+        if right_light is None:
+            right_light = 'GREEN'
         
         n = len(vehicles)
 
@@ -91,7 +91,7 @@ class RedLightViolation(Violation):
         # left turn exception lines
         for line in self.left_exception_lines:
             crossed_in, _ = line.trigger(detections=sv_detections)
-            if left_Light == 'RED':
+            if left_light == 'RED':
                 turning_blocked_mask |= crossed_in # left turn is blocked
             else:
                 left_exception_mask |= crossed_in # allow left turn
@@ -99,7 +99,7 @@ class RedLightViolation(Violation):
         # right turn exception lines
         for line in self.right_exception_lines:
             crossed_in, _ = line.trigger(detections=sv_detections)
-            if right_Light == 'RED':
+            if right_light == 'RED':
                 turning_blocked_mask |= crossed_in # right turn is blocked
             else:
                 right_exception_mask |= crossed_in # allow right turn
@@ -125,7 +125,7 @@ class RedLightViolation(Violation):
             # Set violation state to True right after crossing the violation line no matter what the traffic light state is
             if violated_mask[i]:
                 vehicle.has_violated = True
-                vehicle.straight_light_signal_when_crossing = straight_Light
+                vehicle.straight_light_signal_when_crossing = straight_light
                 vehicle.frame_of_violation = frame.copy()
                 vehicle.state_when_violation = vehicle.get_state()[0]
 

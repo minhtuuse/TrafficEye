@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -12,7 +11,7 @@ class LicensePlateRecognizer:
         self.license_model = license_model
         self.character_model = character_model
 
-    def update(self, vehicle, frame):
+    def update(self, vehicle, frame, state):
         """
         Detect + OCR license plate for a single vehicle
         Returns candidate license plate string (NOT final)
@@ -21,7 +20,7 @@ class LicensePlateRecognizer:
         if frame is None:
             return None
 
-        x1, y1, x2, y2 = map(int, vehicle.get_state()[0])
+        x1, y1, x2, y2 = map(int, state)
         h, w, _ = frame.shape
 
         crop = frame[
@@ -47,6 +46,7 @@ class LicensePlateRecognizer:
         plate_text = self._ocr(lp_crop)
 
         if plate_text is None or len(plate_text) <= 3:
+            print("Cannot recognize plate")
             return None
         print(plate_text)
         return plate_text
