@@ -3,13 +3,35 @@ import numpy as np
 from utils.drawing import draw_light_zone
 
 class LightSignalDetector:
-    def __init__(self, **kwargs):
+    def __init__(self, h, w, **kwargs):
         
         self.straight_light_zones = []  # List of polygons defining straight light zones
         self.left_light_zones = []      # List of polygons defining left turn light zones
         self.right_light_zones = []     # List of polygons defining right turn light zones
 
         self.draw_zones(kwargs.get('frame', None), kwargs.get('window_name', "Traffic Violation Detection"))
+
+        self.zone_masks = {
+            'straight': [],
+            'left': [],
+            'right': []
+        }
+
+        self.build_zone_mask(h, w)
+
+    def build_zone_mask(self, h, w):
+        def make_masks(zones):
+            masks = []
+            for polygon in zones:
+                mask = np.zeros((h, w), dtype=np.uint8)
+                pts = np.array(polygon, np.int32).reshape((-1, 1, 2))
+                cv2.fillPoly(mask, [pts], 255)
+                masks.append(mask)
+            return masks
+        
+        self.zone_masks['straight'] = make_masks(self.straight_light_zones)
+        self.zone_masks['left'] = make_masks(self.left_light_zones)
+        self.zone_masks['right'] = make_masks(self.right_light_zones)
 
     def detect_light_signals(self, image):
         """Detect light signals in the defined zones.
@@ -20,18 +42,6 @@ class LightSignalDetector:
         Returns:
             _type_: return 3 lists of detected light signals for left, right, and straight directions. If a list is empty, it means no zones were defined for that direction.
         """
-        left_lights = []
-        right_lights = []
-        straight_lights = []
-
-        left_candidate = None
-        straight_candidate = None
-        right_candidate = None
-
-        category = {'straight': (self.straight_light_zones, straight_lights),
-                    'left': (self.left_light_zones, left_lights) if len(self.left_light_zones) > 0 else None,
-                    'right': (self.right_light_zones, right_lights) if len(self.right_light_zones) > 0 else None}
-
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         red1 = cv2.inRange(hsv, (0, 20, 50), (30, 255, 255))
@@ -43,50 +53,38 @@ class LightSignalDetector:
 
         green_mask = cv2.inRange(hsv, (55, 70, 120), (95, 255, 255))
 
-        for cat_name in category:
-            if category[cat_name] is None:
-                if cat_name == 'straight':
-                    return f"ERROR: No straight light signal zones defined."
+        candidates = {
+            'left': None,
+            'right': None,
+            'straight': None
+        }
+
+        for direction in self.zone_masks:
+            if len(self.zone_masks[direction]) == 0:
                 continue
-            else:
-                zones, light_list = category[cat_name]
-                for polygon in zones:
-                    mask = np.zeros(image.shape[:2], dtype=np.uint8)
-                    pts = np.array(polygon, np.int32).reshape((-1, 1, 2))
-                    cv2.fillPoly(mask, [pts], 255)
+            scores = {'RED': 0, 'YELLOW': 0, 'GREEN': 0}
+            counts = {'RED': 0, 'YELLOW': 0, 'GREEN': 0}
+            for mask in self.zone_masks[direction]:
+                r = cv2.countNonZero(cv2.bitwise_and(red_mask, red_mask, mask=mask))
+                y = cv2.countNonZero(cv2.bitwise_and(yellow_mask, yellow_mask, mask=mask))
+                g = cv2.countNonZero(cv2.bitwise_and(green_mask, green_mask, mask=mask))
 
-                    red_score = cv2.countNonZero(cv2.bitwise_and(red_mask, red_mask, mask=mask))
-                    yellow_score = cv2.countNonZero(cv2.bitwise_and(yellow_mask, yellow_mask, mask=mask))
-                    green_score = cv2.countNonZero(cv2.bitwise_and(green_mask, green_mask, mask=mask))
-
-                    max_score = max(red_score, yellow_score, green_score)
-                    if max_score == red_score:
-                        light_list.append(('RED', red_score))
-                    elif max_score == yellow_score:
-                        light_list.append(('YELLOW', yellow_score))
-                    else:
-                        light_list.append(('GREEN', green_score))
-
-        # In case there are multiple zones for a direction, and the result differs, average them by strength and pick the strongest
-        for cat_name in category:
-            if category[cat_name] is None:
-                continue
-            else:
-                _, lights = category[cat_name]
-                strength_dict = {}
-                count_dict = {}
-                for state, strength in lights:
-                    strength_dict[state] = strength_dict.get(state, 0) + strength
-                    count_dict[state] = count_dict.get(state, 0) + 1
-                best_state = max(strength_dict, key=strength_dict.get)
-                if cat_name == 'straight':
-                    straight_candidate = (best_state, strength_dict[best_state] / count_dict[best_state])
-                elif cat_name == 'left':
-                    left_candidate = (best_state, strength_dict[best_state] / count_dict[best_state])
+                if r >= y and r >= g:
+                    scores['RED'] += r; counts['RED'] += 1
+                elif y >= g:
+                    scores['YELLOW'] += y; counts['YELLOW'] += 1
                 else:
-                    right_candidate = (best_state, strength_dict[best_state] / count_dict[best_state])
+                    scores['GREEN'] += g; counts['GREEN'] += 1
 
-        return [left_candidate, straight_candidate, right_candidate]
+            best = max(scores, key=scores.get)
+            if counts[best] == 0:
+                score = 0
+            else:
+                score = scores[best] / counts[best]
+            candidates[direction] = (best, score)
+
+        return candidates['left'], candidates['straight'], candidates['right']
+
     
     def draw_zones(self, frame: np.ndarray, window_name="Traffic Violation Detection"):
         """Draw light signal zones interactively.

@@ -135,7 +135,7 @@ def main():
 
             # set up light signal FSMs
             if args.light_detect == 'True':
-                light_detector = LightSignalDetector(frame=first_frame, window_name=window_name)
+                light_detector = LightSignalDetector(h=FRAME_HEIGHT, w=FRAME_WIDTH, frame=first_frame, window_name=window_name)
                 initial_light_list = light_detector.detect_light_signals(first_frame)
                 processed_initial_lights = []
                 for light in initial_light_list:
