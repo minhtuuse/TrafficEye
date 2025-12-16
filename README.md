@@ -96,6 +96,7 @@ python main.py --data_path data/traffic_video.avi --tracker bytetrack --save Tru
 
 Local:
 -   `output/csv/`: Tracking data logs.
+
 MinIO (S3):
 -   `proofs/`: Stores violation evidence (labeled images, video clips).
 -   `retraining-data/`: Stores crops for future model retraining.
