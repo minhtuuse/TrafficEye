@@ -9,8 +9,26 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from utils import MinioClient
 
+
+def _check_minio_connection():
+    """Check if MinIO is available"""
+    try:
+        client = MinioClient()
+        client.s3.list_buckets()
+        return True
+    except Exception:
+        return False
+
+
+# Check connection once at module load
+MINIO_AVAILABLE = _check_minio_connection()
+
+
 @pytest.fixture(scope="session")
 def minio_client():
+    if not MINIO_AVAILABLE:
+        pytest.skip("MinIO is not available - skipping storage tests")
+    
     client = MinioClient()
     
     # Ensure buckets exist for tests (crucial for CI/CD where MinIO is fresh)

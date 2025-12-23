@@ -34,7 +34,7 @@ docker exec -it traffic-monitor /bin/bash
 python app.py
 
 # 5. Run the CLI (inside container)
-python3 main.py --data_path data/traffic_video.avi --tracker bytetrack --save True
+python main.py --data_path path/to/video.mp4 --tracker bytetrack --save False --device cpu --light_detect True
 ```
 
 **Access points:**

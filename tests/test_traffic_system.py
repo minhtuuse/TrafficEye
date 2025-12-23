@@ -41,16 +41,15 @@ def mock_config():
 
 @patch('core.traffic_system.load_config')
 @patch('core.traffic_system.YOLO')
-@patch('core.traffic_system.PaddleOCR')
+@patch('core.traffic_system.FastRecognizer')
 @patch('core.traffic_system.violation_save_worker')
-def test_traffic_system_initialization(mock_worker, mock_ocr, mock_yolo, mock_load_config, mock_config):
+@patch('core.traffic_system.MinioClient')
+def test_traffic_system_initialization(mock_minio, mock_worker, mock_ocr, mock_yolo, mock_load_config, mock_config):
     mock_load_config.return_value = mock_config
     
     system = TrafficSystem("dummy_config.yaml")
     
     # Check if models loaded with correct paths
-    # Note: call_args_list might be empty if we mocked YOLO class itself differently,
-    # but here we mocked the class constructor.
     assert system.vehicle_model_path == 'v_model.pt'
     assert system.license_model_path == 'l_model.pt'
     assert system.device == 'cpu'
@@ -58,9 +57,10 @@ def test_traffic_system_initialization(mock_worker, mock_ocr, mock_yolo, mock_lo
 
 @patch('core.traffic_system.load_config')
 @patch('core.traffic_system.YOLO')
-@patch('core.traffic_system.PaddleOCR')
+@patch('core.traffic_system.FastRecognizer')
 @patch('core.traffic_system.violation_save_worker')
-def test_update_config(mock_worker, mock_ocr, mock_yolo, mock_load_config, mock_config):
+@patch('core.traffic_system.MinioClient')
+def test_update_config(mock_minio, mock_worker, mock_ocr, mock_yolo, mock_load_config, mock_config):
     mock_load_config.return_value = mock_config
     system = TrafficSystem()
     
@@ -72,9 +72,10 @@ def test_update_config(mock_worker, mock_ocr, mock_yolo, mock_load_config, mock_
 
 @patch('core.traffic_system.load_config')
 @patch('core.traffic_system.YOLO')
-@patch('core.traffic_system.PaddleOCR')
+@patch('core.traffic_system.FastRecognizer')
 @patch('core.traffic_system.violation_save_worker')
-def test_capture_first_frame(mock_worker, mock_ocr, mock_yolo, mock_load_config, mock_config):
+@patch('core.traffic_system.MinioClient')
+def test_capture_first_frame(mock_minio, mock_worker, mock_ocr, mock_yolo, mock_load_config, mock_config):
     mock_load_config.return_value = mock_config
     system = TrafficSystem()
     
@@ -91,10 +92,11 @@ def test_capture_first_frame(mock_worker, mock_ocr, mock_yolo, mock_load_config,
 
 @patch('core.traffic_system.load_config')
 @patch('core.traffic_system.YOLO')
-@patch('core.traffic_system.PaddleOCR')
+@patch('core.traffic_system.FastRecognizer')
 @patch('core.traffic_system.violation_save_worker')
+@patch('core.traffic_system.MinioClient')
 @patch('core.traffic_system.inference_video')
-def test_process_flow(mock_inference, mock_worker, mock_ocr, mock_yolo, mock_load_config, mock_config):
+def test_process_flow(mock_inference, mock_minio, mock_worker, mock_ocr, mock_yolo, mock_load_config, mock_config):
     mock_load_config.return_value = mock_config
     system = TrafficSystem()
     
@@ -106,6 +108,7 @@ def test_process_flow(mock_inference, mock_worker, mock_ocr, mock_yolo, mock_loa
     # Mock tracker instance
     system.tracker_instance = MagicMock()
     system.tracker_instance.update.return_value = [] # No tracked objects
+    system.tracker_instance.get_tracked_objects.return_value = []
     
     # Mock preprocess
     with patch('core.traffic_system.preprocess_detection_result') as mock_preprocess:
@@ -131,4 +134,3 @@ def test_process_flow(mock_inference, mock_worker, mock_ocr, mock_yolo, mock_loa
                 assert isinstance(frame, np.ndarray)
             except StopIteration:
                 pytest.fail("Generator stopped unexpectedly")
-

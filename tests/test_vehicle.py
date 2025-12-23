@@ -13,18 +13,16 @@ def test_vehicle_mark_violation(dummy_bbox, dummy_frame):
     vehicle = Vehicle(dummy_bbox, class_id=1)
     vehicle.id = 123 # Mock ID
     
-    # Mock recognizer
-    mock_recognizer = MagicMock()
-    mock_recognizer.update.return_value = "ABC-123"
+    # Pre-set license plate votes (simulating continuous detection before mark_violation)
+    vehicle.lp_votes = {"ABC-123": 3}
+    vehicle.license_plate = "ABC-123"
     
-    # Set threshold to 1 so immediate confirmation happens
-    vehicle.vote_threshold = 1
     vehicle.has_violated = True
     
-    # Mark violation - passing state (bbox) which is required when frame is provided
+    # Mark violation - no recognizer needed (LP detection is now handled by ViolationManager)
     dummy_buffer = [(i, dummy_frame) for i in range(5)]
     state = dummy_bbox  # [x1, y1, x2, y2]
-    vehicle.mark_violation("RedLight", mock_recognizer, frame=dummy_frame, frame_buffer=dummy_buffer, fps=10, state=state)
+    vehicle.mark_violation("RedLight", frame=dummy_frame, frame_buffer=dummy_buffer, fps=10, state=state)
     
     assert vehicle.has_violated is None
     assert "RedLight" in vehicle.violation_type
@@ -38,12 +36,24 @@ def test_vehicle_mark_violation_no_frame(dummy_bbox):
     """Test marking violation without a frame (should still update state but no proof)"""
     vehicle = Vehicle(dummy_bbox, class_id=1)
     
-    mock_recognizer = MagicMock()
-    mock_recognizer.update.return_value = "ABC-123"
+    # Pre-set license plate votes
+    vehicle.lp_votes = {"ABC-123": 1}
     
-    vehicle.vote_threshold = 1
     vehicle.has_violated = True
-    vehicle.mark_violation("Speeding", mock_recognizer)
+    vehicle.mark_violation("Speeding")
     
     assert "Speeding" in vehicle.violation_type
     assert len(vehicle.proof) == 0
+
+def test_vehicle_lp_voting(dummy_bbox):
+    """Test license plate voting logic"""
+    vehicle = Vehicle(dummy_bbox, class_id=1)
+    
+    # Add votes
+    vehicle.update_license_plate("ABC-123")
+    vehicle.update_license_plate("ABC-123")
+    assert vehicle.license_plate is None  # Below threshold (3)
+    
+    vehicle.update_license_plate("XYZ-999")
+    vehicle.update_license_plate("ABC-123")
+    assert vehicle.license_plate == "ABC-123"  # Threshold met
